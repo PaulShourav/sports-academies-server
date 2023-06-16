@@ -6,7 +6,7 @@ require('dotenv').config()
 const app = express()
 app.use(cors())
 app.use(express.json())
-
+const stripe = require("stripe")(process.env.PAYMENT_SECRET_SK)
 const port = process.env.PORT || 5000;
 
 
@@ -31,6 +31,29 @@ async function run() {
     const userCollection = client.db('sportsDB').collection('user')
     const classCollection = client.db('sportsDB').collection('class')
     const selectedClassCollection = client.db('sportsDB').collection('selectedClass')
+    const enrolledClassCollection = client.db('sportsDB').collection('enrolledClass')
+
+    app.post("/create-payment-intent", async (req, res) => {
+      const price = req.body.price;
+      const amount=parseFloat(price)*100
+      // Create a PaymentIntent with the order amount and currency
+      if (price) {
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: amount,
+          currency: "usd",
+          payment_method_types:['card'] 
+        });
+      
+        res.send({
+          clientSecret: paymentIntent.client_secret,
+        });
+      }
+      
+    });
+    app.post('/enrolledClass', async (req, res) => {
+      const result = await enrolledClassCollection.insertOne({ ...req.body })
+      res.send(result)
+    })
     app.post('/user', async (req, res) => {
       console.log('paici');
       const query = {
@@ -176,12 +199,18 @@ async function run() {
       res.send(result)
     })
     app.delete('/selectedClass', async (req, res) => {
-      console.log("delete",req.query.classId,req.query.email);
       const filter={
         classId:req.query.classId,
         studentEmail:req.query.email
       }
       const result = await selectedClassCollection.deleteOne(filter)
+      res.send(result)
+    })
+    app.get('/allInstructor',async(req,res)=>{
+      const filter={
+        role:"instructor"
+      }
+      const result=await userCollection.find(filter).toArray()
       res.send(result)
     })
     await client.db("admin").command({ ping: 1 });
