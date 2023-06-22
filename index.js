@@ -10,7 +10,6 @@ const stripe = require("stripe")(process.env.PAYMENT_SECRET_SK)
 const port = process.env.PORT || 5000;
 
 
-console.log(process.env.DB_PASSWORD);
 const uri = `mongodb+srv://${process.env.DB_USERNAME}:${process.env.DB_PASSWORD}@cluster0.8sp76yj.mongodb.net/?retryWrites=true&w=majority`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -25,7 +24,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
     // Send a ping to confirm a successful connection
 
     const userCollection = client.db('sportsDB').collection('user')
@@ -34,6 +33,7 @@ async function run() {
     const enrolledClassCollection = client.db('sportsDB').collection('enrolledClass')
 
     app.post("/create-payment-intent", async (req, res) => {
+      
       const price = req.body.price;
       const amount=parseFloat(price)*100
       // Create a PaymentIntent with the order amount and currency
@@ -51,7 +51,36 @@ async function run() {
       
     });
     app.post('/enrolledClass', async (req, res) => {
+      const filter={
+        _id:new ObjectId(req.body.classId)
+      }
+      const options = { upsert: true };
+      const findClass=await classCollection.findOne(filter)
+      console.log(findClass);
+      if (findClass.enrolledStudent) {
+        const currentEnrolled=findClass.enrolledStudent+1
+        const updateDoc={
+          $set:{
+            enrolledStudent:currentEnrolled
+          }
+        }
+        await classCollection.updateOne(filter,updateDoc,options)
+      }else{
+        const updateDoc={
+          $set:{
+            enrolledStudent:1
+          }
+        }
+        await classCollection.updateOne(filter,updateDoc,options)
+      }
+    
+      
+      
       const result = await enrolledClassCollection.insertOne({ ...req.body })
+      res.send(result)
+    })
+    app.get('/enrolledClass', async (req, res) => {
+      const result = await enrolledClassCollection.find({}).toArray()
       res.send(result)
     })
     app.post('/user', async (req, res) => {
@@ -67,7 +96,6 @@ async function run() {
       res.send(result)
     })
     app.get('/user', async (req, res) => {
-      console.log("user");
       const result = await userCollection.find({}).toArray()
       res.send(result)
     })
@@ -145,25 +173,38 @@ async function run() {
       const result = await classCollection.find(filter).toArray()
       res.send(result)
     })
-    app.patch('/class', async (req, res) => {
-      const id = req.query.id
-      const status = req.query.status
-      const feedback = req.body
-      console.log(id, status, feedback, req.query);
-      if (req.query.id && req.query.status) {
+    app.patch('/updateClass', async (req, res) => {
+      const filter = {
+        _id:new ObjectId(req.body.id)
+      }
+      const options = { upsert: true };
+      const updateDoc = {
+        $set: {
+          className:req.body.className,
+          availableSeat:req.body.availableSeat,
+          price:req.body.price
+        },
+      };
+      const result = await classCollection.updateOne(filter,updateDoc,options)
+      res.send(result)
+    })
+    app.patch('/class', async (req, res) => {   
         const filter = {
           _id: new ObjectId(req.query.id)
         }
         const options = { upsert: true };
+        
         const updateDoc = {
           $set: {
             status: req.query.status
           },
         };
         const result = await classCollection.updateOne(filter, updateDoc, options)
-        return res.send(result)
-      }
-      if (req.body.feedback) {
+         res.send(result)
+      
+    })
+    app.patch('/feedback',async(req,res)=>{
+      
         const filter = {
           _id: new ObjectId(req.body.id)
         }
@@ -175,8 +216,7 @@ async function run() {
         };
 
         const result = await classCollection.updateOne(filter, updateDoc, options)
-        return res.send(result)
-      }
+         res.send(result)
       
     })
     app.post('/selectedClass', async (req, res) => {
